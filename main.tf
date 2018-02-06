@@ -5,16 +5,6 @@ provider "aws" {
   region     = "${var.aws_region}"
 }
 
-variable "worker_counter" {
-  default = 2
-}
-variable "general_counter" {
-  default = 2
-}
-
-variable "rke_cluster_config" {
-    default = "cluster_test.yml"
-}
 
 data "aws_ami" "ubuntu" {
   most_recent = true
@@ -61,17 +51,42 @@ resource "aws_key_pair" "basic" {
 
 
 resource "aws_security_group" "cluster_instance_sg" {
-  name        = "Cluster-Instances"
+  name        = "Rancher-Instances"
   description = "Rules for connected Rancher host machines. These are the hosts that run containers placed on the cluster."
   vpc_id      = "${module.vpc.vpc_id}"
+
+   // kubernetes specific ports
+#   ingress {
+#       from_port = 6443
+#       to_port   = 6443
+#       protocol  = "tcp"
+#       cidr_blocks = ["0.0.0.0/0"]
+#   }
+#  ingress {
+#       from_port = 6443
+#       to_port   = 6443
+#       protocol  = "udp"
+#       cidr_blocks = ["0.0.0.0/0"]
+#   }
+#   ingress {
+#       from_port = 2379
+#       to_port   = 2380
+#       protocol  = "tcp"
+#       cidr_blocks = ["0.0.0.0/0"]
+#   }
+#   ingress {
+#       from_port = 2379
+#       to_port   = 2380
+#       protocol  = "udp"
+#       cidr_blocks = ["0.0.0.0/0"]
+#   }
 
   ingress {
     from_port = 0
     to_port   = 65535
     protocol  = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
-
-  
 
   egress {
     from_port = 0
@@ -83,6 +98,7 @@ resource "aws_security_group" "cluster_instance_sg" {
     from_port = 0
     to_port   = 65535
     protocol  = "udp"
+    self      = true
   }
 
   // These are for maintenance
@@ -100,6 +116,8 @@ resource "aws_security_group" "cluster_instance_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+ 
 
   # NOTE: To allow ELB proxied traffic to private VPC
 
@@ -129,6 +147,56 @@ module "vpc" {
   tags = {
     Terraform = "true"
     Environment = "dev"
+  }
+
+}
+
+resource "aws_instance" "bastion" {
+  connection {
+        type        = "ssh"
+        user        = "ubuntu"
+        private_key = "${file("./ssh_keys/id_rsa")}"
+        timeout     = "1m"
+        agent       = false
+    }
+
+  ami           = "${data.aws_ami.ubuntu.id}"
+  instance_type = "t2.micro"
+  key_name = "${aws_key_pair.basic.id}"
+  security_groups = ["${aws_security_group.cluster_instance_sg.id}"]
+  
+
+  subnet_id = "${module.vpc.public_subnets[0]}"
+  associate_public_ip_address = true
+  source_dest_check = false
+ 
+  provisioner "file" {
+    source      = "./install_rke.sh"
+    destination = "/tmp/install_rke.sh"
+   }
+
+   
+
+  
+  
+    provisioner "remote-exec" {
+        inline = [
+        "echo '${file("./templates/rke_base.tpl")}' > /tmp/cluster.yaml", 
+        "echo '${join("\n", data.template_file.rke_general_node_definition.*.rendered)}' >>  /tmp/cluster.yaml",
+        "echo '${join("\n", data.template_file.rke_worker_node_definition.*.rendered)}' >>  /tmp/cluster.yaml"
+        ]
+        
+    }
+
+    provisioner "remote-exec" {
+     inline = [
+      "sudo chmod +x /tmp/install_rke.sh",
+      "sudo /tmp/install_rke.sh"
+    ]
+   }
+
+  tags {
+      role = "worker"
   }
 
 }
@@ -218,6 +286,11 @@ resource "aws_instance" "rancher_general" {
 }
 
 resource "null_resource" "example1" {
+    triggers {
+        worker_instance_ids = "${join(",", aws_instance.rancher_worker.*.id)}"
+        general_instance_ids = "${join(",", aws_instance.rancher_general.*.id)}"
+    }
+
     provisioner "local-exec" {
         command = <<EOT
         echo '${file("./templates/rke_base.tpl")}' > ${var.rke_cluster_config} 
@@ -237,3 +310,6 @@ resource "null_resource" "example1" {
 # }
 
 
+output "public_bastion_dns" {
+  value = ["${aws_instance.bastion.*.public_dns}"]
+}

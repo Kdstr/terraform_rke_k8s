@@ -12,3 +12,14 @@ variable "aws_secret_key" {
 variable "aws_region" {
   default = "eu-central-1"
 }
+
+variable "worker_counter" {
+  default = 2
+}
+variable "general_counter" {
+  default = 2
+}
+
+variable "rke_cluster_config" {
+    default = "kube/cluster_test.yml"
+}
