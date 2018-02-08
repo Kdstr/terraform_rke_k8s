@@ -1,0 +1,50 @@
+---
+network:
+  plugin: flannel
+  options:
+    flannel_image: quay.io/coreos/flannel:v0.9.1
+    flannel_cni_image: quay.io/coreos/flannel-cni:v0.2.0
+
+auth:
+  strategy: x509
+  options:
+    foo: bar
+
+ 
+services:
+  etcd:
+    image: quay.io/coreos/etcd:latest
+  kube-api:
+    image: rancher/k8s:v1.8.3-rancher2
+  kube-controller:
+    image: rancher/k8s:v1.8.3-rancher2
+  scheduler:
+    image: rancher/k8s:v1.8.3-rancher2
+  kubelet:
+    image: rancher/k8s:v1.8.3-rancher2
+  kubeproxy:
+    image: rancher/k8s:v1.8.3-rancher2
+
+
+nodes:
+
+  - address: ip-10-0-101-225.eu-central-1.compute.internal
+    user: ubuntu
+    role: [controlplane,etcd]
+    ssh_key_path: "./ssh_keys/id_rsa"
+    internal_address: 10.0.101.225
+  - address: ip-10-0-101-47.eu-central-1.compute.internal
+    user: ubuntu
+    role: [controlplane,etcd]
+    ssh_key_path: "./ssh_keys/id_rsa"
+    internal_address: 10.0.101.47
+  - address: ip-10-0-1-113.eu-central-1.compute.internal
+    user: ubuntu
+    role: [worker]
+    ssh_key_path: "./ssh_keys/id_rsa"
+    internal_address: 10.0.1.113
+  - address: ip-10-0-1-37.eu-central-1.compute.internal
+    user: ubuntu
+    role: [worker]
+    ssh_key_path: "./ssh_keys/id_rsa"
+    internal_address: 10.0.1.37

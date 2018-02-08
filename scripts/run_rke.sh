@@ -1,0 +1,1 @@
+/home/ubuntu/rke up --config /home/ubuntu/cluster.yaml
